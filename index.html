@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>아우토반 3D 레이싱 — PyScript & Three.js</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+
+  <!-- PyScript Latest CDN -->
+  <link rel="stylesheet" href="https://pyscript.net/releases/2025.3.1/core.css" />
+  <script type="module" src="https://pyscript.net/releases/2025.3.1/core.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body { overflow: hidden; background: #111; font-family: 'Pretendard', 'Malgun Gothic', sans-serif; color: #0f172a; }
+
+    /* 글래스모피즘 라이트 패널 */
+    .panel {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+      color: #0f172a;
+    }
+
+    #hud {
+      position: fixed; top: 16px; left: 16px; z-index: 10;
+      padding: 16px; min-width: 260px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .hud-header {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 13px; font-weight: 700; color: #334155;
+    }
+    .hud-badge {
+      background: #ef4444; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 9999px;
+    }
+    .speed-bar-bg {
+      width: 100%; height: 10px; background: #e2e8f0; border-radius: 9999px; overflow: hidden;
+    }
+    #speed-bar-fill {
+      width: 0%; height: 100%; background: linear-gradient(90deg, #2563eb, #ef4444);
+      border-radius: 9999px; transition: width 0.08s ease-out;
+    }
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+      font-size: 13px; font-variant-numeric: tabular-nums;
+    }
+    .stat-chip {
+      background: #f1f5f9; border-radius: 10px; padding: 8px 6px; text-align: center; font-weight: 700; color: #0f172a;
+    }
+    .stat-chip span {
+      display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 2px;
+    }
+
+    #controls {
+      position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%); z-index: 10;
+      padding: 8px 16px; font-size: 12.5px; color: #334155; white-space: nowrap;
+    }
+    .controls-table {
+      border-collapse: collapse;
+    }
+    .controls-table td {
+      padding: 0 12px;
+      border-right: 1px solid rgba(15, 23, 42, 0.12);
+      vertical-align: middle;
+    }
+    .controls-table td:first-child {
+      padding-left: 0;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .controls-table td:last-child {
+      padding-right: 0;
+      border-right: none;
+    }
+    #controls b { color: #0f172a; }
+    .kbd {
+      display: inline-block; background: #e2e8f0; color: #0f172a; font-weight: 700;
+      padding: 1px 6px; border-radius: 5px; font-size: 11px; margin: 0 2px;
+    }
+
+    #msg {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      padding: 26px 38px; font-size: 24px; font-weight: 800; color: #16a34a;
+      display: none; z-index: 20; text-align: center;
+    }
+
+    /* 초기 로딩 오버레이 */
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(10px);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: #f8fafc; transition: opacity 0.4s ease;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid rgba(56, 189, 248, 0.25);
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: spin 0.85s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+    .loading-sub { font-size: 13px; color: #94a3b8; }
+
+    /* 하단 풋터 */
+    #app-footer {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 15;
+      height: 40px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      font-size: 12.5px; color: #cbd5e1;
+    }
+    .footer-btn {
+      background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #f8fafc; padding: 4px 10px; border-radius: 6px; font-size: 12px;
+      cursor: pointer; font-family: inherit; transition: background 0.15s;
+    }
+    .footer-btn:hover { background: rgba(255, 255, 255, 0.2); }
+    .footer-blog-link {
+      display: inline-flex; align-items: center; gap: 4px; color: #7dd3fc;
+      text-decoration: none; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+      background: rgba(56, 189, 248, 0.14); transition: background 0.15s;
+    }
+    .footer-blog-link:hover { background: rgba(56, 189, 248, 0.26); }
+
+    /* 약관 및 라이선스 모달 */
+    #terms-modal {
+      position: fixed; inset: 0; z-index: 50; background: rgba(15, 23, 42, 0.45);
+      display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-card {
+      background: #ffffff; color: #0f172a; border: 1px solid #bae6fd;
+      border-radius: 16px; max-width: 680px; width: 100%; max-height: 82vh;
+      overflow-y: auto; padding: 24px; box-shadow: 0 20px 50px rgba(2, 132, 199, 0.18);
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e0f2fe;
+      color: #0369a1;
+    }
+    .modal-close {
+      background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 8px;
+      padding: 6px 12px; cursor: pointer; font-weight: 700; transition: background 0.15s;
+    }
+    .modal-close:hover { background: #bae6fd; }
+    .terms-box {
+      background: #f0f9ff; border: 1px solid #e0f2fe; padding: 14px; border-radius: 10px; margin-bottom: 12px;
+      font-size: 13px; line-height: 1.65; color: #334155;
+    }
+    .terms-box b { color: #0369a1; }
+    .oss-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12.5px; }
+    .oss-table th, .oss-table td {
+      padding: 8px; border-bottom: 1px solid #bae6fd; text-align: left;
+    }
+    .oss-table th { color: #0284c7; background: #e0f2fe; font-weight: 700; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- 초기 로딩 오버레이 -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">PyScript (WASM Python) 및 3D 아우토반 초기화 중...</div>
+    <div class="loading-sub">잠시만 기다려 주세요. 첫 실행 시 WASM 런타임을 불러옵니다.</div>
+  </div>
+
+  <!-- 좌상단 HUD -->
+  <div id="hud" class="panel">
+    <div class="hud-header">
+      <span>AUTOBAHN 3D RACING</span>
+      <span class="hud-badge">PY-WASM</span>
+    </div>
+    <div class="speed-bar-bg"><div id="speed-bar-fill"></div></div>
+    <div class="stats-grid">
+      <div class="stat-chip"><span>속도</span><div id="speed">0 km/h</div></div>
+      <div class="stat-chip"><span>랩</span><div id="lap">1 / 3</div></div>
+      <div class="stat-chip"><span>시간</span><div id="time">0.0 s</div></div>
+    </div>
+  </div>
+
+  <!-- 풋터 위 1행 조작법 테이블 -->
+  <div id="controls" class="panel">
+    <table class="controls-table">
+      <tr>
+        <td>🎮 게임 조작법</td>
+        <td><span class="kbd">W</span>/<span class="kbd">↑</span> 가속</td>
+        <td><span class="kbd">S</span>/<span class="kbd">↓</span> 후진·감속</td>
+        <td><span class="kbd">A</span>/<span class="kbd">←</span> <span class="kbd">D</span>/<span class="kbd">→</span> 좌우 조향</td>
+        <td><span class="kbd">Space</span> 브레이크</td>
+        <td><span class="kbd">R</span> 위치 초기화</td>
+      </tr>
+    </table>
+  </div>
+
+  <div id="msg" class="panel"></div>
+
+  <footer id="app-footer">
+    <span>Copyright © 2026 Kim Jeongman. All rights reserved.</span>
+    <span>|</span>
+    <button class="footer-btn" id="open-terms-btn">📜 게임약관 및 라이선스</button>
+    <span>|</span>
+    <a href="https://blog.naver.com/jungman3" target="_blank" rel="noopener noreferrer" class="footer-blog-link">📗 Naver Blog</a>
+  </footer>
+
+  <div id="terms-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>📜 게임 이용약관 및 오브젝트 라이선스</h3>
+        <button class="modal-close" id="close-terms-btn">닫기 ✕</button>
+      </div>
+      <div class="terms-box">
+        <b>제1조 (목적 및 이용 안내)</b><br />
+        본 웹 3D 레이싱 게임은 브라우저 환경에서 무료로 제공되는 인터랙티브 웹 게임입니다. 별도의 회원가입이나 개인정보 수집 없이 누구나 자유롭게 플레이할 수 있습니다.
+      </div>
+      <div class="terms-box">
+        <b>제2조 (책임의 제한)</b><br />
+        본 게임은 클라이언트 브라우저 메모리 내에서만 동작하며, 플레이 기록은 외부 서버에 저장되지 않습니다.
+      </div>
+      <div class="terms-box">
+        <b>📦 사용한 3D 오브젝트 및 오픈소스 라이선스</b>
+        <table class="oss-table">
+          <thead>
+            <tr><th>리소스 / 라이브러리</th><th>용도</th><th>라이선스</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>CarConcept (Khronos Group)</b></td><td>가상 스포츠카 3D 모델 (car.glb)</td><td>CC0 / Open Source (glTF-Sample-Assets)</td></tr>
+            <tr><td><b>Three.js</b></td><td>WebGL 3D 렌더링 엔진</td><td>MIT License</td></tr>
+            <tr><td><b>PyScript / Pyodide</b></td><td>브라우저 WASM Python 게임 로직 런타임</td><td>Apache-2.0 / MPL-2.0</td></tr>
+            <tr><td><b>Pretendard</b></td><td>UI 웹폰트</td><td>SIL Open Font License 1.1</td></tr>
+            <tr><td><b>절차적 지형/사운드</b></td><td>도로, 산맥, 나무, Web Audio V8 엔진음</td><td>자체 제작 (코드 내 생성)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js 3D 렌더링 및 오디오 초기화 (ES Module) -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9ec5e8);
+    scene.fog = new THREE.FogExp2(0x9ec5e8, 0.0011);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1600);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    document.body.appendChild(renderer.domElement);
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    // 조명 (따뜻한 오후 햇살)
+    scene.add(new THREE.AmbientLight(0xdbeafe, 0.6));
+    scene.add(new THREE.HemisphereLight(0x87ceeb, 0x3b5e3a, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xfff5e4, 2.0);
+    dirLight.position.set(80, 120, 60);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    // 절차적 아스팔트 텍스처 생성 (차선 포함)
+    function createAsphaltTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#2b2d30';
+      ctx.fillRect(0, 0, 512, 512);
+      for (let i = 0; i < 12000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const v = 35 + Math.floor(Math.random() * 35);
+        ctx.fillStyle = `rgb(${v},${v},${v + 2})`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(24, 0, 14, 512);
+      ctx.fillRect(474, 0, 14, 512);
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(250, 40, 12, 180);
+      ctx.fillRect(250, 300, 12, 180);
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    // 절차적 초원 텍스처 생성
+    function createGrassTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#2d4c2b';
+      ctx.fillRect(0, 0, 512, 512);
+      for (let i = 0; i < 15000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const g = 60 + Math.floor(Math.random() * 45);
+        ctx.fillStyle = `rgb(${Math.floor(g * 0.55)},${g},${Math.floor(g * 0.45)})`;
+        ctx.fillRect(x, y, 2, 3);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(140, 140);
+      return tex;
+    }
+
+    // 잔디 바닥
+    const grassTex = createGrassTexture();
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(2600, 2600),
+      new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // 불규칙한 실사형 산맥 지형 생성
+    const mountainMeshes = [];
+    const mountainMat = new THREE.MeshStandardMaterial({ color: 0x3b4d46, roughness: 0.95, flatShading: true });
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * Math.PI * 2;
+      const dist = 580 + Math.random() * 140;
+      const h = 80 + Math.random() * 95;
+      const r = 90 + Math.random() * 55;
+      const geo = new THREE.ConeGeometry(r, h, 14, 5);
+      const pos = geo.attributes.position;
+      for (let j = 0; j < pos.count; j++) {
+        const y = pos.getY(j);
+        if (y < h / 2 - 1) {
+          pos.setX(j, pos.getX(j) + (Math.random() - 0.5) * 24);
+          pos.setZ(j, pos.getZ(j) + (Math.random() - 0.5) * 24);
+          pos.setY(j, y + (Math.random() - 0.5) * 10);
+        }
+      }
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, mountainMat);
+      m.position.set(Math.cos(a) * dist, h / 2 - 4, Math.sin(a) * dist);
+      scene.add(m);
+      mountainMeshes.push(m);
+    }
+
+    // 아우토반 스타일 타원형 트랙
+    const trackRadiusX = 425;
+    const trackRadiusZ = 260;
+    const trackWidth = 16;
+    const segments = 400;
+    const asphaltTex = createAsphaltTexture();
+    asphaltTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const roadMat = new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.75, polygonOffset: true, polygonOffsetFactor: -1 });
+    const startMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, metalness: 0.8, roughness: 0.3 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3525, roughness: 0.9 });
+    const leafMat1 = new THREE.MeshStandardMaterial({ color: 0x244f26, roughness: 0.85 });
+    const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x2d6330, roughness: 0.85 });
+
+    const trees = [];
+    const treeScales = [0.75, 1.15, 1.65];
+    function createNaturalTree(x, z) {
+      const s = treeScales[Math.floor(Math.random() * treeScales.length)];
+      const group = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22 * s, 0.38 * s, 2.6 * s, 8), trunkMat);
+      trunk.position.y = 1.3 * s;
+      trunk.castShadow = true;
+      group.add(trunk);
+
+      const c1 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.8 * s, 1), leafMat1);
+      c1.position.set(0, 3.2 * s, 0);
+      c1.scale.set(1.1, 0.9, 1.1);
+      c1.castShadow = true;
+      group.add(c1);
+
+      const c2 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.35 * s, 1), leafMat2);
+      c2.position.set(0.4 * s, 4.3 * s, 0.2 * s);
+      c2.castShadow = true;
+      group.add(c2);
+
+      const c3 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.1 * s, 1), leafMat1);
+      c3.position.set(-0.4 * s, 4.0 * s, -0.3 * s);
+      c3.castShadow = true;
+      group.add(c3);
+
+      group.position.set(x, 0, z);
+      scene.add(group);
+      trees.push({ x, z, radius: 1.4 * s, mesh: group, shake: 0 });
+    }
+
+    for (let i = 0; i < segments; i++) {
+      const a1 = (i / segments) * Math.PI * 2;
+      const a2 = ((i + 1) / segments) * Math.PI * 2;
+      const x1 = Math.cos(a1) * trackRadiusX;
+      const z1 = Math.sin(a1) * trackRadiusZ;
+      const x2 = Math.cos(a2) * trackRadiusX;
+      const z2 = Math.sin(a2) * trackRadiusZ;
+
+      const dx = x2 - x1;
+      const dz = z2 - z1;
+      const len = Math.hypot(dx, dz) + 0.02;
+      const angle = Math.atan2(dx, dz);
+
+      const road = new THREE.Mesh(
+        new THREE.BoxGeometry(trackWidth, 0.12, len),
+        i === 0 ? startMat : roadMat
+      );
+      road.position.set((x1 + x2) / 2, 0.05 + (i % 2) * 0.002, (z1 + z2) / 2);
+      road.rotation.y = angle;
+      road.receiveShadow = true;
+      scene.add(road);
+
+      // 양쪽 가드레일
+      const nx = Math.cos(angle);
+      const nz = -Math.sin(angle);
+      for (const side of [-1, 1]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.65, len), railMat);
+        rail.position.set((x1 + x2) / 2 + nx * side * (trackWidth / 2 + 0.8), 0.35, (z1 + z2) / 2 + nz * side * (trackWidth / 2 + 0.8));
+        rail.rotation.y = angle;
+        scene.add(rail);
+      }
+
+      // 장애물 나무 배치
+      if (i % 10 === 0) {
+        const side = (i % 20 === 0) ? 1 : -1;
+        const distOffset = trackWidth / 2 + 5.0 + Math.random() * 8;
+        const tx = (x1 + x2) / 2 + nx * side * distOffset;
+        const tz = (z1 + z2) / 2 + nz * side * distOffset;
+        createNaturalTree(tx, tz);
+      }
+    }
+
+    // 자동차 그룹 및 car.glb 로드 (Draco 압축 지원 + 바퀴 추출)
+    const carGroup = new THREE.Group();
+    carGroup.position.set(trackRadiusX, 0, 0);
+    scene.add(carGroup);
+
+    const wheels = [];
+    const frontWheels = [];
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/draco/gltf/');
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(dracoLoader);
+    loader.load('./car.glb', (gltf) => {
+      const model = gltf.scene;
+      model.rotation.y = 0;
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+        if (child.name === 'wheel_fl' || child.name === 'wheel_fr' || child.name === 'wheel_rl' || child.name === 'wheel_rr') {
+          child.rotation.order = 'YXZ';
+          wheels.push(child);
+          if (child.name === 'wheel_fl' || child.name === 'wheel_fr') {
+            frontWheels.push(child);
+          }
+        }
+      });
+      carGroup.add(model);
+    }, undefined, (err) => {
+      console.error('car.glb 로드 실패:', err);
+    });
+
+    // Web Audio API V8 스포츠카 엔진 & 충돌 사운드
+    let audioCtx = null;
+    let engineOsc1 = null;
+    let engineOsc2 = null;
+    let engineFilter = null;
+    let engineGain = null;
+
+    function initAudio() {
+      if (audioCtx) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return;
+      }
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      engineOsc1 = audioCtx.createOscillator();
+      engineOsc1.type = 'sawtooth';
+      engineOsc1.frequency.value = 32;
+
+      engineOsc2 = audioCtx.createOscillator();
+      engineOsc2.type = 'triangle';
+      engineOsc2.frequency.value = 64;
+
+      const bufferSize = audioCtx.sampleRate * 2;
+      const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+      const whiteNoise = audioCtx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+      whiteNoise.loop = true;
+
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.value = 110;
+      noiseFilter.Q.value = 1.2;
+
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.value = 0.08;
+
+      engineFilter = audioCtx.createBiquadFilter();
+      engineFilter.type = 'lowpass';
+      engineFilter.frequency.value = 140;
+      engineFilter.Q.value = 2.0;
+
+      engineGain = audioCtx.createGain();
+      engineGain.gain.value = 0.12;
+
+      engineOsc1.connect(engineFilter);
+      engineOsc2.connect(engineFilter);
+      whiteNoise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(engineFilter);
+
+      engineFilter.connect(engineGain);
+      engineGain.connect(audioCtx.destination);
+
+      engineOsc1.start();
+      engineOsc2.start();
+      whiteNoise.start();
+    }
+
+    function updateEngineSound(absSpd) {
+      if (!audioCtx || !engineOsc1 || !engineOsc2 || !engineFilter || !engineGain) return;
+      const baseFreq = 30 + absSpd * 55;
+      engineOsc1.frequency.setTargetAtTime(baseFreq, audioCtx.currentTime, 0.06);
+      engineOsc2.frequency.setTargetAtTime(baseFreq * 2.0, audioCtx.currentTime, 0.06);
+      engineFilter.frequency.setTargetAtTime(130 + absSpd * 280, audioCtx.currentTime, 0.06);
+      engineGain.gain.setTargetAtTime(0.10 + absSpd * 0.14, audioCtx.currentTime, 0.06);
+    }
+
+    function playCrashSound() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(140, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(35, audioCtx.currentTime + 0.25);
+      g.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+      osc.connect(g);
+      g.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.25);
+    }
+
+    // 약관 및 라이선스 모달 제어
+    const termsModal = document.getElementById('terms-modal');
+    document.getElementById('open-terms-btn').addEventListener('click', () => { termsModal.style.display = 'flex'; });
+    document.getElementById('close-terms-btn').addEventListener('click', () => { termsModal.style.display = 'none'; });
+    termsModal.addEventListener('click', (e) => { if (e.target === termsModal) termsModal.style.display = 'none'; });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Python 브릿지 노출
+    window.gameBridge = {
+      THREE,
+      scene,
+      camera,
+      renderer,
+      carGroup,
+      trees,
+      wheels,
+      frontWheels,
+      mountainMeshes,
+      trackRadiusX,
+      trackRadiusZ,
+      trackWidth,
+      initAudio,
+      updateEngineSound,
+      playCrashSound,
+      raycastMountains(ox, oy, oz, dx, dy, dz, maxDist) {
+        const rayOrigin = new THREE.Vector3(ox, oy, oz);
+        const moveDir = new THREE.Vector3(dx, dy, dz).normalize();
+        const raycaster = new THREE.Raycaster(rayOrigin, moveDir, 0, maxDist);
+        const hits = raycaster.intersectObjects(mountainMeshes, false);
+        return hits.length > 0;
+      },
+      updateCamera(angle, cameraShake) {
+        const camOffset = new THREE.Vector3(0, 4.5, -10).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+        const targetCamPos = carGroup.position.clone().add(camOffset);
+        if (cameraShake > 0.005) {
+          targetCamPos.x += (Math.random() - 0.5) * cameraShake;
+          targetCamPos.y += (Math.random() - 0.5) * cameraShake;
+        }
+        camera.position.lerp(targetCamPos, 0.1);
+        camera.lookAt(carGroup.position.x, carGroup.position.y + 1.2, carGroup.position.z);
+      },
+      render() {
+        renderer.render(scene, camera);
+      }
+    };
+  </script>
+
+  <!-- PyScript (WASM Python) 게임 핵심 로직 -->
+  <script type="py">
+    import math
+    from pyscript import window, document
+    from pyodide.ffi import create_proxy
+
+    bridge = window.gameBridge
+    car = bridge.carGroup
+    THREE = bridge.THREE
+
+    track_rx = float(bridge.trackRadiusX)
+    track_rz = float(bridge.trackRadiusZ)
+    track_width = float(bridge.trackWidth)
+    half_road = track_width / 2.0
+    avg_radius = (track_rx + track_rz) / 2.0
+
+    keys = {}
+    state = {
+        "speed": 0.0,
+        "velocity_y": 0.0,
+        "camera_shake": 0.0,
+        "angle": 0.0,
+        "lap": 1,
+        "passed_half": False,
+        "start_time": window.performance.now(),
+        "finished": False,
+        "initialized": False,
+    }
+
+    speed_el = document.getElementById("speed")
+    speed_bar_fill = document.getElementById("speed-bar-fill")
+    lap_el = document.getElementById("lap")
+    time_el = document.getElementById("time")
+    msg_el = document.getElementById("msg")
+
+    def on_keydown(e):
+        keys[e.code] = True
+        bridge.initAudio()
+        if e.code in ("Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"):
+            e.preventDefault()
+
+    def on_keyup(e):
+        keys[e.code] = False
+
+    window.addEventListener("keydown", create_proxy(on_keydown))
+    window.addEventListener("keyup", create_proxy(on_keyup))
+
+    def reset_car():
+        car.position.set(track_rx, 0.0, 0.0)
+        state["speed"] = 0.0
+        state["velocity_y"] = 0.0
+        state["camera_shake"] = 0.0
+        state["angle"] = 0.0
+        state["lap"] = 1
+        state["passed_half"] = False
+        state["finished"] = False
+        state["start_time"] = window.performance.now()
+        msg_el.style.display = "none"
+        lap_el.textContent = "1 / 3"
+
+    def hide_loading_overlay():
+        overlay = document.getElementById("loading-overlay")
+        if overlay:
+            overlay.style.opacity = "0"
+            window.setTimeout(create_proxy(lambda: setattr(overlay.style, "display", "none")), 400)
+
+    def animate(ts=0):
+        if not state["initialized"]:
+            state["initialized"] = True
+            state["start_time"] = window.performance.now()
+            hide_loading_overlay()
+
+        if keys.get("KeyR", False):
+            reset_car()
+
+        if not state["finished"]:
+            accel = 0.065
+            max_speed = 3.8
+            friction = 0.985
+
+            if keys.get("KeyW", False) or keys.get("ArrowUp", False):
+                state["speed"] += accel
+            if keys.get("KeyS", False) or keys.get("ArrowDown", False):
+                state["speed"] -= accel * 0.8
+            if keys.get("Space", False):
+                state["speed"] *= 0.9
+
+            state["speed"] = max(-0.5, min(max_speed, state["speed"]))
+            state["speed"] *= friction
+
+            if abs(state["speed"]) > 0.01:
+                turn_speed = 0.035 * (1.0 if state["speed"] >= 0 else -1.0)
+                if keys.get("KeyA", False) or keys.get("ArrowLeft", False):
+                    state["angle"] += turn_speed
+                if keys.get("KeyD", False) or keys.get("ArrowRight", False):
+                    state["angle"] -= turn_speed
+
+            car.rotation.y = state["angle"]
+            next_x = car.position.x + math.sin(state["angle"]) * state["speed"]
+            next_z = car.position.z + math.cos(state["angle"]) * state["speed"]
+
+            # 나무 및 산(Raycaster 정밀 표면) 장애물 충돌 체크
+            hit_obstacle = False
+            hit_tree = None
+            for t in bridge.trees:
+                if math.hypot(next_x - t.x, next_z - t.z) < t.radius + 1.3:
+                    hit_obstacle = True
+                    hit_tree = t
+                    break
+
+            if not hit_obstacle and abs(state["speed"]) > 0.001:
+                dir_sign = -1.0 if state["speed"] < 0 else 1.0
+                dx = math.sin(state["angle"]) * dir_sign
+                dz = math.cos(state["angle"]) * dir_sign
+                if bridge.raycastMountains(car.position.x, 0.8, car.position.z, dx, 0.0, dz, 2.3 + abs(state["speed"])):
+                    hit_obstacle = True
+
+            if hit_obstacle:
+                if abs(state["speed"]) > 0.05:
+                    bridge.playCrashSound()
+                    state["camera_shake"] = min(0.6, abs(state["speed"]) * 0.25)
+                    if hit_tree is not None:
+                        hit_tree.shake = min(0.35, abs(state["speed"]) * 0.15)
+                    state["speed"] = -state["speed"] * 0.3
+                else:
+                    state["speed"] = 0.0
+            else:
+                car.position.x = next_x
+                car.position.z = next_z
+
+            # 나무 흔들림 애니메이션 업데이트
+            now_sec = window.performance.now() * 0.025
+            for t in bridge.trees:
+                if t.shake > 0.002:
+                    t.mesh.rotation.z = math.sin(now_sec) * t.shake
+                    t.mesh.rotation.x = math.cos(now_sec * 0.8) * t.shake * 0.5
+                    t.shake *= 0.92
+                elif t.shake != 0:
+                    t.shake = 0
+                    t.mesh.rotation.set(0, 0, 0)
+
+            # 도로 경계석(연석) 타고 넘기 물리
+            ellipse_dist = math.hypot(car.position.x / track_rx, car.position.z / track_rz)
+            dist_from_centerline = abs(ellipse_dist - 1.0) * avg_radius
+            on_curb = (half_road - 0.3 < dist_from_centerline < half_road + 1.5)
+            min_ground_y = 0.68 if on_curb else 0.0
+
+            if on_curb and car.position.y <= min_ground_y + 0.05 and abs(state["speed"]) > 0.4:
+                state["velocity_y"] = 0.16 + min(0.22, abs(state["speed"]) * 0.06)
+            state["velocity_y"] -= 0.015
+            car.position.y += state["velocity_y"]
+            if car.position.y < min_ground_y:
+                car.position.y = min_ground_y
+                state["velocity_y"] = 0.0
+
+            # 엔진 사운드 RPM 업데이트
+            bridge.updateEngineSound(abs(state["speed"]))
+
+            # 바퀴 구름 회전 및 앞바퀴 조향 각도 적용
+            for w in bridge.wheels:
+                w.rotation.x -= state["speed"] * 2.5
+            steer_angle = 0.35 if (keys.get("KeyA", False) or keys.get("ArrowLeft", False)) else (-0.35 if (keys.get("KeyD", False) or keys.get("ArrowRight", False)) else 0.0)
+            for fw in bridge.frontWheels:
+                fw.rotation.y = THREE.MathUtils.lerp(fw.rotation.y, steer_angle, 0.2)
+
+            # 랩 체크 (3랩 완주)
+            if car.position.x < -track_rx + 15:
+                state["passed_half"] = True
+            if state["passed_half"] and car.position.x > track_rx - 10 and abs(car.position.z) < 10:
+                state["passed_half"] = False
+                state["lap"] += 1
+                if state["lap"] > 3:
+                    state["finished"] = True
+                    total = f"{(window.performance.now() - state['start_time']) / 1000.0:.1f}"
+                    msg_el.innerHTML = f"완주 성공!<br><span style='font-size:18px;color:#0f172a;'>기록: {total}초 (R키로 재시작)</span>"
+                    msg_el.style.display = "block"
+                else:
+                    lap_el.textContent = f"{state['lap']} / 3"
+
+            kmh = round(abs(state["speed"]) * 95)
+            speed_el.textContent = f"{kmh} km/h"
+            speed_bar_fill.style.width = f"{min(100.0, (abs(state['speed']) / 3.8) * 100.0):.1f}%"
+            time_el.textContent = f"{(window.performance.now() - state['start_time']) / 1000.0:.1f} s"
+
+        # 3인칭 추적 카메라 (+ 충돌 시 카메라 충격 흔들림)
+        bridge.updateCamera(state["angle"], state["camera_shake"])
+        if state["camera_shake"] > 0.005:
+            state["camera_shake"] *= 0.85
+        else:
+            state["camera_shake"] = 0.0
+
+        bridge.render()
+        window.requestAnimationFrame(animate_proxy)
+
+    animate_proxy = create_proxy(animate)
+    window.requestAnimationFrame(animate_proxy)
+  </script>
+</body>
+</html>
