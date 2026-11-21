@@ -28,6 +28,11 @@
     #hud {
       position: fixed; top: 16px; left: 16px; z-index: 10;
       padding: 16px; min-width: 260px; display: flex; flex-direction: column; gap: 12px;
+      opacity: 0; transform: translateX(-30px);
+      transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #hud.show {
+      opacity: 1; transform: translateX(0);
     }
     .hud-header {
       display: flex; justify-content: space-between; align-items: center;
@@ -55,8 +60,13 @@
     }
 
     #controls {
-      position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%); z-index: 10;
+      position: fixed; bottom: 48px; left: 50%; transform: translate(-50%, 24px); z-index: 10;
       padding: 8px 16px; font-size: 12.5px; color: #334155; white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #controls.show {
+      opacity: 1; transform: translate(-50%, 0);
     }
     .controls-table {
       border-collapse: collapse;
@@ -86,6 +96,48 @@
       padding: 26px 38px; font-size: 24px; font-weight: 800; color: #16a34a;
       display: none; z-index: 20; text-align: center;
     }
+
+    #ready-text {
+      position: fixed; top: 16%; left: 50%; transform: translateX(-50%) skewX(-12deg);
+      font-size: 52px; font-weight: 900; font-style: italic; letter-spacing: 0.08em;
+      color: #dc2626;
+      -webkit-text-stroke: 2px #ffffff;
+      text-shadow:
+        0 3px 0 #7f1d1d,
+        0 6px 0 #450a0a,
+        0 10px 22px rgba(0, 0, 0, 0.65);
+      display: none; z-index: 20; pointer-events: none; white-space: nowrap;
+      animation: readyPop 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    @keyframes readyPop {
+      0%   { opacity: 0; transform: translateX(-50%) skewX(-12deg) translateY(-40px) scale(0.4); }
+      45%  { opacity: 1; transform: translateX(-50%) skewX(-12deg) translateY(6px) scale(1.18); }
+      68%  { transform: translateX(-50%) skewX(-12deg) translateY(-4px) scale(0.94); }
+      85%  { transform: translateX(-50%) skewX(-12deg) translateY(2px) scale(1.04); }
+      100% { opacity: 1; transform: translateX(-50%) skewX(-12deg) translateY(0) scale(1); }
+    }
+
+    /* 인트로 동영상 오버레이 */
+    #intro-overlay {
+      position: fixed; inset: 0; z-index: 200; background: #000;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 0.45s ease;
+    }
+    #intro-video {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .intro-controls {
+      position: fixed; bottom: 28px; right: 28px; z-index: 201;
+      display: flex; gap: 10px;
+    }
+    .intro-btn {
+      background: rgba(15, 23, 42, 0.72); color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      padding: 10px 18px; border-radius: 9999px; font-size: 13.5px; font-weight: 700;
+      cursor: pointer; font-family: inherit; transition: background 0.15s, transform 0.1s;
+    }
+    .intro-btn:hover { background: rgba(30, 41, 59, 0.9); transform: translateY(-1px); }
 
     /* 초기 로딩 오버레이 */
     #loading-overlay {
@@ -169,6 +221,15 @@
   </script>
 </head>
 <body>
+  <!-- 인트로 동영상 오버레이 -->
+  <div id="intro-overlay">
+    <video id="intro-video" src="./ayeong_racing.mp4" autoplay muted playsinline></video>
+    <div class="intro-controls">
+      <button id="intro-mute-btn" class="intro-btn" type="button">🔊 소리 켜기</button>
+      <button id="intro-skip-btn" class="intro-btn" type="button">⏭ 건너뛰기</button>
+    </div>
+  </div>
+
   <!-- 초기 로딩 오버레이 -->
   <div id="loading-overlay">
     <div class="spinner"></div>
@@ -205,6 +266,7 @@
   </div>
 
   <div id="msg" class="panel"></div>
+  <div id="ready-text">READY TO START</div>
 
   <footer id="app-footer">
     <span>Copyright © 2026 Kim Jeongman. All rights reserved.</span>
@@ -446,9 +508,10 @@
       }
     }
 
-    // 자동차 그룹 및 car.glb 로드 (Draco 압축 지원 + 바퀴 추출)
+    // 자동차 그룹 및 car.glb 로드 (등장 시퀀스를 위해 초기 숨김)
     const carGroup = new THREE.Group();
     carGroup.position.set(trackRadiusX, 0, 0);
+    carGroup.visible = false;
     scene.add(carGroup);
 
     const wheels = [];
@@ -562,6 +625,85 @@
       osc.stop(audioCtx.currentTime + 0.25);
     }
 
+    // 인트로 동영상 제어
+    const introOverlay = document.getElementById('intro-overlay');
+    const introVideo = document.getElementById('intro-video');
+    const introMuteBtn = document.getElementById('intro-mute-btn');
+    const introSkipBtn = document.getElementById('intro-skip-btn');
+
+    function closeIntro() {
+      if (!introOverlay || introOverlay.dataset.closed) return;
+      introOverlay.dataset.closed = '1';
+      introVideo.pause();
+      introOverlay.style.opacity = '0';
+      setTimeout(() => {
+        introOverlay.style.display = 'none';
+
+        // 1단계: 왼쪽 게임 상태 박스 등장
+        setTimeout(() => {
+          document.getElementById('hud')?.classList.add('show');
+        }, 150);
+
+        // 2단계: 하단 조작법 박스 등장
+        setTimeout(() => {
+          document.getElementById('controls')?.classList.add('show');
+        }, 450);
+
+        // 3단계: 레이싱카 하늘에서 스프링처럼 탄력있게 낙하
+        setTimeout(() => {
+          carGroup.visible = true;
+          carGroup.scale.set(1, 1, 1);
+          window.gameBridge.carDropY = 16.0;
+          const startDrop = performance.now();
+          const duration = 800;
+
+          function easeOutBounce(x) {
+            const n1 = 7.5625;
+            const d1 = 2.75;
+            if (x < 1 / d1) {
+              return n1 * x * x;
+            } else if (x < 2 / d1) {
+              return n1 * (x -= 1.5 / d1) * x + 0.75;
+            } else if (x < 2.5 / d1) {
+              return n1 * (x -= 2.25 / d1) * x + 0.9375;
+            } else {
+              return n1 * (x -= 2.625 / d1) * x + 0.984375;
+            }
+          }
+
+          function dropCar(now) {
+            const p = Math.min(1, (now - startDrop) / duration);
+            window.gameBridge.carDropY = 16.0 * (1.0 - easeOutBounce(p));
+            if (p < 1) {
+              requestAnimationFrame(dropCar);
+            } else {
+              window.gameBridge.carDropY = 0.0;
+            }
+          }
+          requestAnimationFrame(dropCar);
+        }, 750);
+
+        // 4단계: 차가 착지한 후 "READY TO START" 탄력있게 등장
+        setTimeout(() => {
+          const readyEl = document.getElementById('ready-text');
+          if (readyEl) {
+            readyEl.style.display = 'block';
+            setTimeout(() => {
+              readyEl.style.display = 'none';
+            }, 2500);
+          }
+        }, 1600);
+      }, 450);
+    }
+
+    introMuteBtn.addEventListener('click', () => {
+      introVideo.muted = !introVideo.muted;
+      introMuteBtn.textContent = introVideo.muted ? '🔊 소리 켜기' : '🔇 음소거';
+    });
+    introSkipBtn.addEventListener('click', closeIntro);
+    introVideo.addEventListener('ended', closeIntro);
+    introVideo.addEventListener('error', closeIntro);
+
     // 약관 및 라이선스 모달 제어
     const termsModal = document.getElementById('terms-modal');
     document.getElementById('open-terms-btn').addEventListener('click', () => { termsModal.style.display = 'flex'; });
@@ -588,6 +730,7 @@
       trackRadiusX,
       trackRadiusZ,
       trackWidth,
+      carDropY: 0.0,
       initAudio,
       updateEngineSound,
       playCrashSound,
@@ -768,6 +911,8 @@
             if car.position.y < min_ground_y:
                 car.position.y = min_ground_y
                 state["velocity_y"] = 0.0
+            if bridge.carDropY > 0.0:
+                car.position.y = min_ground_y + bridge.carDropY
 
             # 엔진 사운드 RPM 업데이트
             bridge.updateEngineSound(abs(state["speed"]))
